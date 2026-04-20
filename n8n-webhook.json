@@ -1,0 +1,98 @@
+{
+  "name": "sys-monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sys-monitor",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a2019a4c-b2df-466e-8d57-e3e8516c1f69",
+      "name": "Webhook",
+      "webhookId": "03cb4ddc-da00-4ac4-96e0-4c0374dd0179"
+    },
+    {
+      "parameters": {
+        "fromEmail": "seagate16gb@strey.net.br",
+        "toEmail": "maicon@strey.net.br",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "0daf69a7-73b1-4b36-ad38-6aea05293074",
+      "name": "Send an Email",
+      "webhookId": "32a0df73-f917-4144-931b-2d714ec15726",
+      "credentials": {
+        "smtp": {
+          "id": "Qbhxj3FlpLhatJ3a",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Obtém os dados do webhook\nconst data = $input.first().json.body;\n\n// Função para escapar HTML\nfunction escapeHtml(str) {\n  if (!str) return '';\n  return str\n    .replace(/&/g, '&amp;')\n    .replace(/</g, '&lt;')\n    .replace(/>/g, '&gt;')\n    .replace(/\"/g, '&quot;')\n    .replace(/'/g, '&#39;');\n}\n\n// Constrói o HTML dinamicamente\nlet containersHtml = '';\nconst containers = data.containers || [];\n\nif (containers.length === 0) {\n  containersHtml = '<p style=\"text-align: center; color: #999; font-style: italic; margin-top: 16px;\">Nenhum container Docker em execução</p>';\n} else {\n  containersHtml = `\n    <table style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n      <thead>\n        <tr style=\"background-color: #f8f9fa;\">\n          <th style=\"padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;\">Container</th>\n          <th style=\"padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;\">Status</th>\n          <th style=\"padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;\">Imagem</th>\n        </tr>\n      </thead>\n      <tbody>\n  `;\n  for (const container of containers) {\n    const badge = container.update_available\n      ? '<span style=\"background-color: #ff9800; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;\">🔄 UPDATE</span>'\n      : '<span style=\"background-color: #4caf50; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;\">✓ OK</span>';\n    containersHtml += `\n      <tr>\n        <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>${escapeHtml(container.name)}</strong></td>\n        <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: center;\">${badge}</td>\n        <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-family: monospace; font-size: 12px;\">${escapeHtml(container.image)}</td>\n      </tr>\n    `;\n  }\n  containersHtml += '</tbody></table>';\n}\n\nconst htmlContent = `\n<div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; color: #333333;\">\n  <div style=\"background-color: #2c3e50; color: #ffffff; padding: 20px; text-align: center;\">\n    <h2 style=\"margin: 0; font-size: 20px;\">Relatório de Saúde da Infraestrutura</h2>\n  </div>\n  <div style=\"padding: 24px;\">\n    <div style=\"background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #27ae60; margin-bottom: 24px;\">\n      <p style=\"margin: 0 0 8px 0;\"><strong>Status Geral:</strong> ${escapeHtml(data.status_global)}</p>\n      <p style=\"margin: 0;\"><strong>Uptime:</strong> ${escapeHtml(data.sistema.uptime)}</p>\n    </div>\n    <h3 style=\"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\">💾 SDCARD</h3>\n    <table style=\"width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;\">\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Status:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.sd_card.status)}</td></tr>\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Detalhe:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.sd_card.mensagem)}</td></tr>\n      <tr><td style=\"padding: 8px 0;\"><strong>Uso do HD:</strong></td><td style=\"padding: 8px 0; text-align: right;\">${escapeHtml(data.sd_card.uso_pct)}%</td></tr>\n    </table>\n    <h3 style=\"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\">💾 HD EXTRENO</h3>\n    <table style=\"width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;\">\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Status:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.disco.status)}</td></tr>\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Detalhe:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.disco.mensagem)}</td></tr>\n      <tr><td style=\"padding: 8px 0;\"><strong>Uso do HD:</strong></td><td style=\"padding: 8px 0; text-align: right;\">${escapeHtml(data.disco.uso_pct)}%</td></tr>\n    </table>\n    <h3 style=\"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\">🧠 MEMÓRIA</h3>\n    <table style=\"width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;\">\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Uso de RAM:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.memoria.uso_pct)}%</td></tr>\n      <tr><td style=\"padding: 8px 0;\"><strong>Consumo Absoluto:</strong></td><td style=\"padding: 8px 0; text-align: right;\">${escapeHtml(data.memoria.usada_mb)} MB</td></tr>\n    </table>\n    <h3 style=\"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\">⚙️ CPU</h3>\n    <table style=\"width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 14px;\">\n      <tr><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>Temperatura:</strong></td><td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: right;\">${escapeHtml(data.cpu.temperatura_c)} °C</td></tr>\n      <tr><td style=\"padding: 8px 0;\"><strong>Carga (1m):</strong></td><td style=\"padding: 8px 0; text-align: right;\">${escapeHtml(data.cpu.load_1m)}</td></tr>\n    </table>\n    <h3 style=\"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\">🐳 CONTAINERS EM EXECUÇÃO</h3>\n    ${containersHtml}\n  </div>\n  <div style=\"background-color: #f4f4f4; padding: 12px; text-align: center; font-size: 11px; color: #888888;\">\n    Relatório gerado automaticamente pelo sistema de monitoramento via n8n.\n  </div>\n</div>\n`;\n\n// Define o assunto com ícone\nlet icon = '';\nif (data.status_global === 'OK') icon = '🟢';\nelse if (data.status_global === 'WARNING') icon = '🟡';\nelse icon = '🔴';\nconst subject = `${icon} Relatório do Servidor: ${data.status_global}`;\n\n// Retorna o HTML e o assunto para o próximo nó\nreturn {\n  html: htmlContent,\n  subject: subject,\n  // Mantém os dados originais se necessário\n  ...$input.first().json\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8088342d-4774-4c8b-b56a-ce3b96bfc8a7",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "45961d2d-b8a7-44b1-915e-5c7b83325d06",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "76556b98827663c20a5f9df9384348c6799d2a6ba726375de416b41783b4e39b"
+  },
+  "id": "ExQsUhUynVMNnOy6",
+  "tags": []
+}
