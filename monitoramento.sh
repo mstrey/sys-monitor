@@ -2,14 +2,12 @@
 export LC_ALL=C                                             
 
 # --- Configurações Globais ---                             
-# Lê as variáveis do arquivo .env (caso exista) localizado no mesmo diretório do script
+# Lê as variáveis do arquivo .env
 ENV_FILE="$(dirname "$0")/.env"
-if [ -f "$ENV_FILE" ]; then
-    source "$ENV_FILE"
-fi
+source "$ENV_FILE"
 
-WEBHOOK_URL="${WEBHOOK_URL:-http://127.0.0.1:5678/webhook/sys-monitor}"
-MOUNT_POINT="${MOUNT_POINT:-/mnt/storage}"
+WEBHOOK_URL="${WEBHOOK_URL}"
+MOUNT_POINT="${MOUNT_POINT}"
                                                            
 # Variáveis globais para coleta de dados                    
 HD_STATUS=""                                              
