@@ -211,18 +211,14 @@ coleta_containers() {
         [ -z "$current_tag" ] && current_tag="latest"
         log_info "  Verificando atualizações para $image_name..."
 
-        if docker pull "$image_name" > /dev/null 2>&1; then
-            local remote_digest=$(docker inspect --format='{.Id}}' "$image_name" 2>/dev/null)
-            local current_digest=$(docker inspect --format='{{.Image}}' "$container_name" 2>/dev/null)
+        local remote_digest=$(docker inspect --format='{{.Id}}' "$image_name" 2>/dev/null)
+        local current_digest=$(docker inspect --format='{{.Image}}' "$container_name" 2>/dev/null)
 
-            if [ -n "$remote_digest" ] && [ -n "$current_digest" ] && [ "$remote_digest" != "$current_digest" ]; then
-                update_available="true"
-                log_info "  ✓ Nova versão disponível para $container_name"
-            else                                                            
-                log_success "  Container atualizado: $container_name"
-            fi
-        else
-            log_error "  Falha ao verificar atualizações para $image_name"
+        if [ -n "$remote_digest" ] && [ -n "$current_digest" ] && [ "$remote_digest" != "$current_digest" ]; then
+            update_available="true"
+            log_info "  ✓ Nova versão disponível para $container_name"
+        else                                                            
+            log_success "  Container atualizado: $container_name"
         fi
 
         containers_json="${containers_json}{\"name\":\"$container_name\",\"image\":\"$current_image\",\"update_available\":$update_available},"
