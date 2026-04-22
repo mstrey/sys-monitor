@@ -1,0 +1,6 @@
+# Configuração padrão do Git para garantir que os arquivos sejam convertidos
+# para o formato LF (Unix) no repositório, independentemente do
+# sistema operacional do desenvolvedor.
+* text=auto eol=lf
+*.sh text eol=lf
+*.env text eol=lf
