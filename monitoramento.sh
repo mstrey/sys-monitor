@@ -1,10 +1,43 @@
 #!/bin/bash                                                 
-export LC_ALL=C                                             
 
-# --- Configurações Globais ---                             
-# Lê as variáveis do arquivo .env
-ENV_FILE="$(dirname "$0")/.env"
-source "$ENV_FILE"
+LOG_FILE="$(date '+%y%m%d').log"
+
+log_info() {
+    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+log_success() {
+    echo "[✓] $(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+log_error() {
+    echo "[✗] $(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
+}
+
+log_section() {
+    {
+        echo ""
+        echo "=========================================="
+        echo "$1"
+        echo "=========================================="
+    } | tee -a "$LOG_FILE"
+}
+
+export LC_ALL=C                                             
+# Define um PATH completo para garantir que comandos como df, awk e curl funcionem no cron
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Descobre o diretório real onde este script está salvo e entra nele
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+# Carrega as variáveis de ambiente
+if [ ! -f .env ]; then
+    log_error "Arquivo .env não encontrado no diretório $SCRIPT_DIR"
+    exit 1
+fi
+
+source .env
 
 WEBHOOK_URL="${WEBHOOK_URL}"
 MOUNT_POINT="${MOUNT_POINT}"
@@ -26,24 +59,6 @@ CONTAINERS_LIST="[]"
 GLOBAL_STATUS="OK"     
 
 # --- Função de Log ---
-log_info() {
-    echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1"
-}
-
-log_success() {
-    echo "[✓] $(date '+%Y-%m-%d %H:%M:%S') - $1"
-}
-
-log_error() {
-    echo "[✗] $(date '+%Y-%m-%d %H:%M:%S') - $1"
-}
-
-log_section() {
-    echo ""
-    echo "=========================================="
-    echo "$1"
-    echo "=========================================="
-}
 
 coleta_hd() {
     log_info "Iniciando coleta de dados do disco..."
@@ -106,19 +121,20 @@ coleta_memoria() {
     log_info "Iniciando coleta de dados de memória..."
     RAM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
     RAM_USADA=$(free -m | awk '/Mem:/ {print $3}')
-    RAM_PCT=$(awk "BEGIN {printf \"%.0f\", ($RAM_USADA/$RAM_
-TOTAL)*100}")
+    RAM_PCT=$(awk "BEGIN {printf \"%.0f\", ($RAM_USADA/$RAM_TOTAL)*100}")
 
     log_info "Memória total: ${RAM_TOTAL}MB"
-    log_info "Memória usada: ${RAM_USADA}MB (${RAM_PCT}%)"  
+    log_info "Memória usada: ${RAM_USADA}MB (${RAM_PCT}%)"
     if [ "$RAM_PCT" -gt 90 ]; then
-        log_error "Uso de memória elevado: ${RAM_PCT}%"         
-    elif [ "$RAM_PCT" -gt 75 ]; then
+        log_error "Uso de memória elevado: ${RAM_PCT}%"
+        return
+    fi
+    if [ "$RAM_PCT" -gt 75 ]; then
         log_info "Uso de memória moderado: ${RAM_PCT}%"
-    else                                                            
-        log_success "Uso de memória saudável: ${RAM_PCT}%"
-    fi                                                                                                                      
-    log_success "Coleta de dados de memória finalizada"     
+        return
+    fi
+    log_success "Uso de memória saudável: ${RAM_PCT}%"
+    return
 }                                                           
 
 coleta_cpu() {                                                 
@@ -133,13 +149,14 @@ coleta_cpu() {
 
     if (( $(echo "$CPU_TEMP > 75.0" | bc -l) )); then
         log_error "Temperatura elevada: ${CPU_TEMP}°C"
-    elif (( $(echo "$CPU_TEMP > 60.0" | bc -l) )); then
-        log_info "Temperatura moderada: ${CPU_TEMP}°C"
-    else
-        log_success "Temperatura adequada: ${CPU_TEMP}°C"
+        return
     fi
-
-    log_success "Coleta de dados de CPU finalizada"
+    if (( $(echo "$CPU_TEMP > 60.0" | bc -l) )); then
+        log_info "Temperatura moderada: ${CPU_TEMP}°C"
+        return
+    fi
+    log_success "Temperatura adequada: ${CPU_TEMP}°C"
+    return
 }
 
 coleta_uptime() {
@@ -308,6 +325,73 @@ exibir_resumo() {
     echo "=========================================="
 }
 
+clean_disk() {
+    log_info "Limpando arquivos temporários..."
+    rm -rf /tmp/*
+    rm -rf /tmp/.*
+    rm -rf /var/tmp/*
+    rm -rf /var/log/*
+    rm -rf /var/log/.*
+    
+    log_info "Limpando apt files..."
+    rm -rf /var/cache/apt/*
+    apt autoremove -y
+    apt clean
+    log_success "Apt limpo!"
+
+    log_info "Limpando docker..."
+    docker system prune -a -f
+    log_success "Docker limpo!"
+}
+
+
+pull_all_images() {
+    log_info "Puxando todas as imagens..."
+    
+    if [ -z "$HOME_GIT_DIR" ]; then
+        log_error "Variável HOME_GIT_DIR não está definida."
+        return
+    fi
+
+    if [ ! -d "$HOME_GIT_DIR" ]; then
+        log_error "Diretório não encontrado: $HOME_GIT_DIR"
+        return
+    fi
+
+    # Variável EXCLUDED_DIRS deve vir do .env, ex: EXCLUDED_DIRS="dir1,dir2"
+    IFS=',' read -r -a excluded_array <<< "${EXCLUDED_DIRS:-}"
+
+    for dir in "$HOME_GIT_DIR"/*/; do
+        # Verifica se é um diretório válido
+        [ -d "$dir" ] || continue
+        
+        dir_name=$(basename "$dir")
+        
+        skip=false
+        for exc in "${excluded_array[@]}"; do
+            # Limpa espaços em branco nas bordas
+            exc="${exc#"${exc%%[![:space:]]*}"}"
+            exc="${exc%"${exc##*[![:space:]]}"}"
+            
+            if [ "$dir_name" = "$exc" ]; then
+                skip=true
+                break
+            fi
+        done
+
+        if [ "$skip" = true ]; then
+            log_info "Ignorando diretório: $dir_name (lista de exclusões)"
+            continue
+        fi
+
+        log_info "Executando 'docker pull' em: $dir_name"
+        if ! (cd "$dir" && docker pull); then
+            log_error "Falha ao executar 'docker pull' no diretório $dir_name"
+        fi
+    done
+    log_success "Processo de pull de imagens concluído."
+}
+
 main() {
     log_section "INICIANDO MONITORAMENTO DO SISTEMA"
     log_info "Data/Hora: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -325,6 +409,9 @@ main() {
     exibir_resumo
 
     log_section "MONITORAMENTO CONCLUÍDO"
+
+    clean_disk
+
 }
 
 main
