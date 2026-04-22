@@ -1,6 +1,14 @@
 #!/bin/bash                                                 
 
-LOG_FILE="$(date '+%y%m%d').log"
+export LC_ALL=C                                             
+# Define um PATH completo para garantir que comandos como df, awk e curl funcionem no cron
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Descobre o diretório real onde este script está salvo e entra nele
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR" || exit 1
+
+LOG_FILE="$SCRIPT_DIR/$(date '+%y%m%d').log"
 
 log_info() {
     echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -23,14 +31,6 @@ log_section() {
     } | tee -a "$LOG_FILE"
 }
 
-export LC_ALL=C                                             
-# Define um PATH completo para garantir que comandos como df, awk e curl funcionem no cron
-export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-# Descobre o diretório real onde este script está salvo e entra nele
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR" || exit 1
-
 # Carrega as variáveis de ambiente
 if [ ! -f .env ]; then
     log_error "Arquivo .env não encontrado no diretório $SCRIPT_DIR"
@@ -41,6 +41,7 @@ source .env
 
 WEBHOOK_URL="${WEBHOOK_URL}"
 MOUNT_POINT="${MOUNT_POINT}"
+
                                                            
 # Variáveis globais para coleta de dados                    
 HD_STATUS=""                                              
