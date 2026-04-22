@@ -286,6 +286,7 @@ gerar_payload_json() {
        }')
 
     if echo "$JSON_DATA" | jq . > /dev/null 2>&1; then
+        log_info "JSON: $JSON_DATA"
         log_success "JSON gerado com sucesso"
     else
         log_error "Falha na geração do JSON"
