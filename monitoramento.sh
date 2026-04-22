@@ -41,7 +41,6 @@ source .env
 
 WEBHOOK_URL="${WEBHOOK_URL}"
 MOUNT_POINT="${MOUNT_POINT}"
-
                                                            
 # Variáveis globais para coleta de dados                    
 HD_STATUS=""                                              
@@ -332,9 +331,8 @@ clean_disk() {
     rm -rf /tmp/*
     rm -rf /tmp/.*
     rm -rf /var/tmp/*
-    rm -rf /var/log/*
-    rm -rf /var/log/.*
-    
+    rm -rf /var/tmp/.*
+
     log_info "Limpando apt files..."
     rm -rf /var/cache/apt/*
     apt autoremove -y
