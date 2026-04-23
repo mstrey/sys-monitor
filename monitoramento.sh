@@ -293,16 +293,18 @@ enviar_para_n8n() {
     log_info "Enviando dados para o n8n..."
     log_info "Webhook URL: $WEBHOOK_URL"
 
-    local HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        -H "Content-Type: application/json" \
-        -d "$JSON_DATA" \
-        "$WEBHOOK_URL")
+    local call="curl -s -o /dev/null -w \"%{http_code}\" -X POST \
+        -H \"Content-Type: application/json\" \
+        -d \"$JSON_DATA\" \
+        \"$WEBHOOK_URL\""
+    local HTTP_STATUS=$(eval $call)
 
     if [ "$HTTP_STATUS" -eq 200 ]; then
         log_success "Dados enviados com sucesso para o n8n (HTTP $HTTP_STATUS)"
-    else
-        log_error "Falha ao enviar para o n8n. Código HTTP: $HTTP_STATUS"
+        return 0
     fi
+    log_error "Falha ao enviar para o n8n. Código HTTP: $HTTP_STATUS"
+    return 1
 }
 
 exibir_resumo() {
