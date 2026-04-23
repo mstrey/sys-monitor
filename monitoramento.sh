@@ -300,7 +300,7 @@ enviar_para_n8n() {
     local HTTP_STATUS=$(eval $call)
 
     if [ "$HTTP_STATUS" -eq 200 ]; then
-        log_success "Dados enviados com sucesso para o n8n (HTTP $HTTP_STATUS)"
+        log_success "Dados enviados com sucesso para o n8n (chamada curl: $call)"
         return 0
     fi
     log_error "Falha ao enviar para o n8n. Código HTTP: $HTTP_STATUS"
