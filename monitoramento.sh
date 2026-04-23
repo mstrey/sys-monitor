@@ -299,8 +299,10 @@ enviar_para_n8n() {
         \"$WEBHOOK_URL\""
     local HTTP_STATUS=$(eval $call)
 
+    log_info "chamada n8n: $call"
+
     if [ "$HTTP_STATUS" -eq 200 ]; then
-        log_success "Dados enviados com sucesso para o n8n (chamada curl: $call)"
+        log_success "Dados enviados com sucesso para o n8n (HTTP $HTTP_STATUS)"
         return 0
     fi
     log_error "Falha ao enviar para o n8n. Código HTTP: $HTTP_STATUS"
