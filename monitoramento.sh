@@ -33,7 +33,7 @@ log_section() {
 
 # Carrega as variáveis de ambiente
 if [ ! -f .env ]; then
-    log_error "Arquivo .env não encontrado no diretório $SCRIPT_DIR"
+    log_error "Arquivo .env nao encontrado no diretorio $SCRIPT_DIR"
     exit 1
 fi
 
@@ -58,8 +58,6 @@ UPTIME_FMT=""
 CONTAINERS_LIST="[]"
 GLOBAL_STATUS="OK"     
 
-# --- Função de Log ---
-
 coleta_hd() {
     log_info "Iniciando coleta de dados do disco..."
     if mountpoint -q "$MOUNT_POINT"; then
@@ -75,17 +73,17 @@ coleta_hd() {
         fi
         if [ "$HD_USAGE" -gt 90 ]; then
             HD_STATUS="WARNING"
-            HD_MSG="Espaço crítico atingido."
+            HD_MSG="Espaco critico atingido."
             log_error "$HD_MSG"
             return
         fi
         HD_STATUS="OK"
-        HD_MSG="Operação normal."
+        HD_MSG="Operacao normal."
         log_success "Disco operando normalmente"
         return
     fi
     HD_STATUS="CRITICAL"
-    HD_MSG="Desconexão: O disco não está montado."
+    HD_MSG="Desconexao: O disco nao esta montado."
     HD_USAGE=0
     log_error "$HD_MSG"
 }
@@ -107,33 +105,33 @@ coleta_sd() {
     
     if [ "$SD_USAGE" -gt 90 ]; then
         SD_STATUS="WARNING"
-        SD_MSG="Espaço crítico atingido no SD Card."
+        SD_MSG="Espaco critico atingido no SD Card."
         log_error "$SD_MSG"
         return
     fi
     
     SD_STATUS="OK"
-    SD_MSG="Operação normal."
+    SD_MSG="Operacao normal."
     log_success "SD Card operando normalmente"
 }
 
 coleta_memoria() {
-    log_info "Iniciando coleta de dados de memória..."
+    log_info "Iniciando coleta de dados de memoria..."
     RAM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
     RAM_USADA=$(free -m | awk '/Mem:/ {print $3}')
     RAM_PCT=$(awk "BEGIN {printf \"%.0f\", ($RAM_USADA/$RAM_TOTAL)*100}")
 
-    log_info "Memória total: ${RAM_TOTAL}MB"
-    log_info "Memória usada: ${RAM_USADA}MB (${RAM_PCT}%)"
+    log_info "Memoria total: ${RAM_TOTAL}MB"
+    log_info "Memoria usada: ${RAM_USADA}MB (${RAM_PCT}%)"
     if [ "$RAM_PCT" -gt 90 ]; then
-        log_error "Uso de memória elevado: ${RAM_PCT}%"
+        log_error "Uso de memoria elevado: ${RAM_PCT}%"
         return
     fi
     if [ "$RAM_PCT" -gt 75 ]; then
-        log_info "Uso de memória moderado: ${RAM_PCT}%"
+        log_info "Uso de memoria moderado: ${RAM_PCT}%"
         return
     fi
-    log_success "Uso de memória saudável: ${RAM_PCT}%"
+    log_success "Uso de memoria saudavel: ${RAM_PCT}%"
     return
 }                                                           
 
@@ -172,16 +170,16 @@ coleta_containers() {
 
     IGNORED_CONTAINERS="lamp|bolao-dev|bolao-prd|ollama"    
     if ! command -v docker &> /dev/null; then
-        log_error "Docker não está instalado no sistema"
+        log_error "Docker nao esta instalado no sistema"
         CONTAINERS_LIST="[]"
-        log_success "Coleta de containers finalizada (Docker não disponível)"
+        log_success "Coleta de containers finalizada (Docker nao disponivel)"
         return
     fi
 
     if ! docker ps &> /dev/null; then
-        log_error "Docker não está em execução ou sem permissão"
+        log_error "Docker nao esta em execucao ou sem permissao"
         CONTAINERS_LIST="[]"
-        log_success "Coleta de containers finalizada (Docker indisponível)"
+        log_success "Coleta de containers finalizada (Docker indisponivel)"
         return
     fi
 
@@ -192,7 +190,7 @@ coleta_containers() {
         [ -z "$container_name" ] && continue
         if echo "$container_name" | grep -E "^($IGNORED_CONTAINERS)$" > /dev/null; then
             skipped_count=$((skipped_count + 1))
-            log_info "Ignorando container (na lista de exclusão): $container_name"
+            log_info "Ignorando container (na lista de exclusao): $container_name"
             continue
         fi
 
@@ -209,14 +207,14 @@ coleta_containers() {
         local image_name=$(echo "$current_image" | cut -d':' -f1)
         local current_tag=$(echo "$current_image" | cut -d':' -f2)
         [ -z "$current_tag" ] && current_tag="latest"
-        log_info "  Verificando atualizações para $image_name..."
+        log_info "  Verificando atualizacoes para $image_name..."
 
         local remote_digest=$(docker inspect --format='{{.Id}}' "$image_name" 2>/dev/null)
         local current_digest=$(docker inspect --format='{{.Image}}' "$container_name" 2>/dev/null)
 
         if [ -n "$remote_digest" ] && [ -n "$current_digest" ] && [ "$remote_digest" != "$current_digest" ]; then
             update_available="true"
-            log_info "  ✓ Nova versão disponível para $container_name"
+            log_info "  ✓ Nova versao disponivel para $container_name"
         else                                                            
             log_success "  Container atualizado: $container_name"
         fi
@@ -242,16 +240,16 @@ avalia_status_global() {
 
     if [ "$HD_STATUS" == "CRITICAL" ] || [ "$SD_STATUS" == "CRITICAL" ] || [ "$RAM_PCT" -gt 95 ]; then
         GLOBAL_STATUS="CRITICAL"
-        log_error "Status global: CRITICAL (SD, HD ou memória em estado crítico)"
+        log_error "Status global: CRITICAL (SD, HD ou memoria em estado critico)"
     elif [ "$HD_STATUS" == "WARNING" ] || [ "$SD_STATUS" == "WARNING" ] || [ "$RAM_PCT" -gt 85 ] || [ "$TEMP_ALTA" -eq 1 ]; then
         GLOBAL_STATUS="WARNING"
-        log_error "Status global: WARNING (Alerta em SD, HD, memória ou temperatura)"
+        log_error "Status global: WARNING (Alerta em SD, HD, memoria ou temperatura)"
     else
         GLOBAL_STATUS="OK"
-        log_success "Status global: OK (Sistema saudável)"
+        log_success "Status global: OK (Sistema saudavel)"
     fi
 
-    log_success "Avaliação de status finalizada"
+    log_success "Avaliacao de status finalizada"
 }
 
 gerar_payload_json() {
@@ -285,7 +283,7 @@ gerar_payload_json() {
         log_info "JSON: $JSON_DATA"
         log_success "JSON gerado com sucesso"
     else
-        log_error "Falha na geração do JSON"
+        log_error "Falha na geracao do JSON"
     fi
 }
 
@@ -305,21 +303,21 @@ enviar_para_n8n() {
         log_success "Dados enviados com sucesso para o n8n (HTTP $HTTP_STATUS)"
         return 0
     fi
-    log_error "Falha ao enviar para o n8n. Código HTTP: $HTTP_STATUS"
+    log_error "Falha ao enviar para o n8n. Codigo HTTP: $HTTP_STATUS"
     return 1
 }
 
 exibir_resumo() {
-    log_section "RESUMO DA EXECUÇÃO"
+    log_section "RESUMO DA EXECUCAO"
     echo "Status Global: $GLOBAL_STATUS"
     echo "SD: $SD_STATUS (${SD_USAGE}%) - $SD_MSG"
     echo "HD: $HD_STATUS (${HD_USAGE}%) - $HD_MSG"
-    echo "Memória: ${RAM_PCT}% (${RAM_USADA}MB/${RAM_TOTAL}MB)"
+    echo "Memoria: ${RAM_PCT}% (${RAM_USADA}MB/${RAM_TOTAL}MB)"
     echo "CPU: Load ${CPU_LOAD}, Temperatura ${CPU_TEMP}°C"
     echo "Uptime: $UPTIME_FMT"
 
     local container_count=$(echo "$CONTAINERS_LIST" | jq '. | length' 2>/dev/null || echo "0")
-    echo "Containers em execução: $container_count"
+    echo "Containers em execucao: $container_count"
 
     echo ""
     echo "Timestamp final: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -327,7 +325,7 @@ exibir_resumo() {
 }
 
 clean_disk() {
-    log_info "Limpando arquivos temporários..."
+    log_info "Limpando arquivos temporarios..."
     rm -rf /tmp/*
     rm -rf /tmp/.*
     rm -rf /var/tmp/*
@@ -349,12 +347,12 @@ pull_all_images() {
     log_info "Puxando todas as imagens..."
     
     if [ -z "$HOME_GIT_DIR" ]; then
-        log_error "Variável HOME_GIT_DIR não está definida."
+        log_error "Variavel HOME_GIT_DIR nao esta definida."
         return
     fi
 
     if [ ! -d "$HOME_GIT_DIR" ]; then
-        log_error "Diretório não encontrado: $HOME_GIT_DIR"
+        log_error "Diretorio nao encontrado: $HOME_GIT_DIR"
         return
     fi
 
@@ -369,7 +367,7 @@ pull_all_images() {
         
         skip=false
         for exc in "${excluded_array[@]}"; do
-            # Limpa espaços em branco nas bordas
+            # Limpa espacos em branco nas bordas
             exc="${exc#"${exc%%[![:space:]]*}"}"
             exc="${exc%"${exc##*[![:space:]]}"}"
             
@@ -380,16 +378,16 @@ pull_all_images() {
         done
 
         if [ "$skip" = true ]; then
-            log_info "Ignorando diretório: $dir_name (lista de exclusões)"
+            log_info "Ignorando diretorio: $dir_name (lista de exclusoes)"
             continue
         fi
 
         log_info "Executando 'docker pull' em: $dir_name"
         if ! (cd "$dir" && docker pull); then
-            log_error "Falha ao executar 'docker pull' no diretório $dir_name"
+            log_error "Falha ao executar 'docker pull' no diretorio $dir_name"
         fi
     done
-    log_success "Processo de pull de imagens concluído."
+    log_success "Processo de pull de imagens concluido."
 }
 
 main() {
@@ -408,7 +406,7 @@ main() {
     enviar_para_n8n
     exibir_resumo
 
-    log_section "MONITORAMENTO CONCLUÍDO"
+    log_section "MONITORAMENTO CONCLUIDO"
 
     clean_disk
 
