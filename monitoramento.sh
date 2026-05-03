@@ -1,5 +1,6 @@
 #!/bin/bash                                                 
 
+TEMPO_EXECUCAO=0
 export LC_ALL=C                                             
 # Define um PATH completo para garantir que comandos como df, awk e curl funcionem no cron
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -8,7 +9,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 
-LOG_FILE="$SCRIPT_DIR/$(date '+%y%m%d').log"
+LOG_FILE="$SCRIPT_DIR/$(date '+%y%m%d-%H%M').log"
 
 log_info() {
     echo "[INFO] $(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
@@ -31,7 +32,6 @@ log_section() {
     } | tee -a "$LOG_FILE"
 }
 
-# Carrega as variáveis de ambiente
 if [ ! -f .env ]; then
     log_error "Arquivo .env nao encontrado no diretorio $SCRIPT_DIR"
     exit 1
@@ -42,7 +42,6 @@ source .env
 WEBHOOK_URL="${WEBHOOK_URL}"
 MOUNT_POINT="${MOUNT_POINT}"
                                                            
-# Variáveis globais para coleta de dados                    
 HD_STATUS=""                                              
 HD_MSG=""                                                 
 HD_USAGE=0                                                
@@ -60,30 +59,34 @@ GLOBAL_STATUS="OK"
 
 coleta_hd() {
     log_info "Iniciando coleta de dados do disco..."
-    if mountpoint -q "$MOUNT_POINT"; then
-        log_info "Ponto de montagem $MOUNT_POINT encontrado"
-        IS_RO=$(awk -v m="$MOUNT_POINT" '$2==m {print $4}' /proc/mounts | grep -P "(^|,)ro(,|$)")
+    if grep -qs "$MOUNT_POINT" /proc/mounts; then
+        log_info "Ponto de montagem $MOUNT_POINT confirmado em /proc/mounts"
+        local MOUNT_OPTS=$(awk -v m="$MOUNT_POINT" '$2==m {print $4}' /proc/mounts)
         HD_USAGE=$(df -h "$MOUNT_POINT" | awk 'NR==2 {print $5}' | sed 's/%//')
+        
         log_info "Uso do disco: ${HD_USAGE}%"
-        if [ -n "$IS_RO" ]; then
+        
+        if [[ "$MOUNT_OPTS" == *"ro"* ]]; then
             HD_STATUS="CRITICAL"
             HD_MSG="Falha de I/O. Modo Somente Leitura ativado."
             log_error "$HD_MSG"
             return
         fi
+        
         if [ "$HD_USAGE" -gt 90 ]; then
             HD_STATUS="WARNING"
             HD_MSG="Espaco critico atingido."
             log_error "$HD_MSG"
             return
         fi
+        
         HD_STATUS="OK"
         HD_MSG="Operacao normal."
         log_success "Disco operando normalmente"
         return
     fi
     HD_STATUS="CRITICAL"
-    HD_MSG="Desconexao: O disco nao esta montado."
+    HD_MSG="Desconexao: O disco nao esta montado em $MOUNT_POINT."
     HD_USAGE=0
     log_error "$HD_MSG"
 }
@@ -168,17 +171,16 @@ coleta_uptime() {
 coleta_containers() {                                           
     log_info "Iniciando coleta de containers Docker..."
 
-    IGNORED_CONTAINERS="lamp|bolao-dev|bolao-prd|ollama"    
+    CONTAINERS_LIST="[]"
+    
     if ! command -v docker &> /dev/null; then
         log_error "Docker nao esta instalado no sistema"
-        CONTAINERS_LIST="[]"
         log_success "Coleta de containers finalizada (Docker nao disponivel)"
         return
     fi
 
     if ! docker ps &> /dev/null; then
         log_error "Docker nao esta em execucao ou sem permissao"
-        CONTAINERS_LIST="[]"
         log_success "Coleta de containers finalizada (Docker indisponivel)"
         return
     fi
@@ -209,23 +211,32 @@ coleta_containers() {
         [ -z "$current_tag" ] && current_tag="latest"
         log_info "  Verificando atualizacoes para $image_name..."
 
-        local remote_digest=$(docker inspect --format='{{.Id}}' "$image_name" 2>/dev/null)
-        local current_digest=$(docker inspect --format='{{.Image}}' "$container_name" 2>/dev/null)
+        local container_image_id=$(docker inspect "$container_name" --format='{{.Image}}' 2>/dev/null)
+        local host_image_id=$(docker inspect "$current_image" --format='{{.Id}}' 2>/dev/null)
 
-        if [ -n "$remote_digest" ] && [ -n "$current_digest" ] && [ "$remote_digest" != "$current_digest" ]; then
-            update_available="true"
-            log_info "  ✓ Nova versao disponivel para $container_name"
-        else                                                            
-            log_success "  Container atualizado: $container_name"
+        log_info "Container Image: ${container_image_id:0:18}... - Host Image: ${host_image_id:0:18}..."
+
+        if [ -n "$host_image_id" ] && [ "$container_image_id" != "$host_image_id" ]; then
+            local uptime_seconds=$(docker inspect "$container_name" --format='{{.State.StartedAt}}' | xargs date +%s -d)
+            local now_seconds=$(date +%s)
+            local diff=$((now_seconds - uptime_seconds))
+
+            if [ $diff -gt 60 ]; then
+                update_available="true"
+                log_info "  ✓ Nova versao detectada para $container_name"
+            else
+                log_success "  Container recém-atualizado: $container_name"
+            fi
+        else
+            log_success "  Container em conformidade: $container_name"
         fi
 
         containers_json="${containers_json}{\"name\":\"$container_name\",\"image\":\"$current_image\",\"update_available\":$update_available},"
 
     done <<< "$(docker ps --format '{{.Names}}')"
+
     if [ -n "$containers_json" ]; then
         CONTAINERS_LIST="[${containers_json%,}]"
-    else
-        CONTAINERS_LIST="[]"
     fi
 
     log_info "Total de containers analisados: $container_count"
@@ -255,8 +266,9 @@ avalia_status_global() {
 gerar_payload_json() {
     log_info "Gerando payload JSON..."
 
-    JSON_DATA=$(jq -n \
+    jq -n \
       --arg status "$GLOBAL_STATUS" \
+      --arg total_time "$TEMPO_EXECUCAO" \
       --arg hd_status "$HD_STATUS" \
       --arg hd_msg "$HD_MSG" \
       --arg hd_uso "$HD_USAGE" \
@@ -271,17 +283,17 @@ gerar_payload_json() {
       --argjson containers "$CONTAINERS_LIST" \
       '{
          status_global: $status,
+         tempo_execucao: $total_time,
          sistema: { uptime: $sys_up },
          sd_card: { status: $sd_status, mensagem: $sd_msg, uso_pct: $sd_uso },
          disco: { status: $hd_status, mensagem: $hd_msg, uso_pct: $hd_uso },
          memoria: { uso_pct: $r_pct, usada_mb: $r_uso },
          cpu: { load_1m: $c_load, temperatura_c: $c_temp },
          containers: $containers
-       }')
+       }' > /tmp/payload.json
 
-    if echo "$JSON_DATA" | jq . > /dev/null 2>&1; then
-        log_info "JSON: $JSON_DATA"
-        log_success "JSON gerado com sucesso"
+    if [ $? -eq 0 ]; then
+        log_success "JSON gerado com sucesso em /tmp/payload.json"
     else
         log_error "Falha na geracao do JSON"
     fi
@@ -289,21 +301,20 @@ gerar_payload_json() {
 
 enviar_para_n8n() {
     log_info "Enviando dados para o n8n..."
-    log_info "Webhook URL: $WEBHOOK_URL"
+    
+    local CLEAN_URL=$(echo "$WEBHOOK_URL" | tr -d '\r' | xargs)
+    log_info "URL Sanitizada: $CLEAN_URL"
 
-    local call="curl -s -o /dev/null -w \"%{http_code}\" -X POST \
-        -H \"Content-Type: application/json\" \
-        -d \"$JSON_DATA\" \
-        \"$WEBHOOK_URL\""
-    local HTTP_STATUS=$(eval $call)
-
-    log_info "chamada n8n: $call"
+    local HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+        -H "Content-Type: application/json" \
+        --data-binary "@/tmp/payload.json" \
+        "$CLEAN_URL")
 
     if [ "$HTTP_STATUS" -eq 200 ]; then
-        log_success "Dados enviados com sucesso para o n8n (HTTP $HTTP_STATUS)"
+        log_success "Dados enviados com sucesso (HTTP $HTTP_STATUS)"
         return 0
     fi
-    log_error "Falha ao enviar para o n8n. Codigo HTTP: $HTTP_STATUS"
+    log_error "Falha no envio. Codigo HTTP: $HTTP_STATUS"
     return 1
 }
 
@@ -326,22 +337,17 @@ exibir_resumo() {
 
 clean_disk() {
     log_info "Limpando arquivos temporarios..."
-    rm -rf /tmp/*
-    rm -rf /tmp/.*
-    rm -rf /var/tmp/*
-    rm -rf /var/tmp/.*
+    sudo rm -rf /tmp/* /var/tmp/* 2>/dev/null
 
     log_info "Limpando apt files..."
-    rm -rf /var/cache/apt/*
-    apt autoremove -y
-    apt clean
+    sudo apt autoremove -y >/dev/null 2>&1
+    sudo apt clean >/dev/null 2>&1
     log_success "Apt limpo!"
 
     log_info "Limpando docker..."
-    docker system prune -a -f
+    docker system prune -f >/dev/null 2>&1
     log_success "Docker limpo!"
 }
-
 
 pull_all_images() {
     log_info "Puxando todas as imagens..."
@@ -356,18 +362,15 @@ pull_all_images() {
         return
     fi
 
-    # Variável EXCLUDED_DIRS deve vir do .env, ex: EXCLUDED_DIRS="dir1,dir2"
     IFS=',' read -r -a excluded_array <<< "${EXCLUDED_DIRS:-}"
 
     for dir in "$HOME_GIT_DIR"/*/; do
-        # Verifica se é um diretório válido
         [ -d "$dir" ] || continue
         
         dir_name=$(basename "$dir")
         
         skip=false
         for exc in "${excluded_array[@]}"; do
-            # Limpa espacos em branco nas bordas
             exc="${exc#"${exc%%[![:space:]]*}"}"
             exc="${exc%"${exc##*[![:space:]]}"}"
             
@@ -382,19 +385,35 @@ pull_all_images() {
             continue
         fi
 
-        log_info "Executando 'docker pull' em: $dir_name"
-        if ! (cd "$dir" && docker pull); then
-            log_error "Falha ao executar 'docker pull' no diretorio $dir_name"
+        log_info "Atualizando containers em: $dir_name"
+        if (cd "$dir" && docker compose pull -q && docker compose up -d --remove-orphans); then
+            if [[ "$dir_name" == "n8n" ]]; then
+                log_info "Aguardando n8n ficar saudável..."
+                local attempts=0
+                while [ "$(docker inspect --format='{{.State.Health.Status}}' n8n 2>/dev/null)" != "healthy" ]; do
+                    sleep 5
+                    attempts=$((attempts + 1))
+                    if [ $attempts -gt 30 ]; then
+                        log_error "Timeout aguardando healthcheck do n8n."
+                        break
+                    fi
+                done
+                log_success "n8n está online!"
+            fi
+            continue
         fi
+        log_error "Falha ao atualizar o diretorio $dir_name"
     done
     log_success "Processo de pull de imagens concluido."
 }
 
 main() {
+    local start_time=$SECONDS
     log_section "INICIANDO MONITORAMENTO DO SISTEMA"
     log_info "Data/Hora: $(date '+%Y-%m-%d %H:%M:%S')"
     log_info "Hostname: $(hostname)"
 
+    pull_all_images
     coleta_hd
     coleta_sd
     coleta_memoria
@@ -402,6 +421,9 @@ main() {
     coleta_uptime
     coleta_containers
     avalia_status_global
+
+    TEMPO_EXECUCAO=$(( SECONDS - start_time ))
+
     gerar_payload_json
     enviar_para_n8n
     exibir_resumo
@@ -409,7 +431,6 @@ main() {
     log_section "MONITORAMENTO CONCLUIDO"
 
     clean_disk
-
 }
 
 main
