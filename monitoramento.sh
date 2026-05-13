@@ -206,33 +206,35 @@ coleta_containers() {
         fi
         log_info "  Imagem atual: $current_image"
         local update_available="false"
+        local updated_now="false" # Nova variável indicadora
+        
         local image_name=$(echo "$current_image" | cut -d':' -f1)
-        local current_tag=$(echo "$current_image" | cut -d':' -f2)
-        [ -z "$current_tag" ] && current_tag="latest"
         log_info "  Verificando atualizacoes para $image_name..."
 
         local container_image_id=$(docker inspect "$container_name" --format='{{.Image}}' 2>/dev/null)
         local host_image_id=$(docker inspect "$current_image" --format='{{.Id}}' 2>/dev/null)
 
+        # Captura o momento exato da CRIAÇÃO do container (em segundos)
+        local created_at=$(docker inspect "$container_name" --format='{{.Created}}' 2>/dev/null)
+        local created_sec=$(date +%s -d "$created_at" 2>/dev/null || echo 0)
+        local now_sec=$(date +%s)
+        local age_sec=$((now_sec - created_sec))
+
         log_info "Container Image: ${container_image_id:0:18}... - Host Image: ${host_image_id:0:18}..."
 
         if [ -n "$host_image_id" ] && [ "$container_image_id" != "$host_image_id" ]; then
-            local uptime_seconds=$(docker inspect "$container_name" --format='{{.State.StartedAt}}' | xargs date +%s -d)
-            local now_seconds=$(date +%s)
-            local diff=$((now_seconds - uptime_seconds))
-
-            if [ $diff -gt 60 ]; then
-                update_available="true"
-                log_info "  ✓ Nova versao detectada para $container_name"
-            else
-                log_success "  Container recém-atualizado: $container_name"
-            fi
+            # Existe versão nova baixada, mas o container ainda roda a antiga (algo impediu a recriação)
+            update_available="true"
+            log_info "  ! Nova versao pendente para $container_name (Requer recriacao manual)"
+        elif [ $age_sec -lt 600 ]; then 
+            # O container foi recriado nos últimos 10 minutos (exatamente a janela deste script)
+            updated_now="true"
+            log_success "  ✓ NOVA VERSÃO APLICADA! Container recém-atualizado: $container_name"
         else
             log_success "  Container em conformidade: $container_name"
         fi
 
-        containers_json="${containers_json}{\"name\":\"$container_name\",\"image\":\"$current_image\",\"update_available\":$update_available},"
-
+containers_json="${containers_json}{\"name\":\"$container_name\",\"image\":\"$current_image\",\"update_available\":$update_available,\"updated_now\":$updated_now},"
     done <<< "$(docker ps --format '{{.Names}}')"
 
     if [ -n "$containers_json" ]; then
