@@ -1,0 +1,98 @@
+{
+  "name": "sys-monitor",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sys-monitor",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "a2019a4c-b2df-466e-8d57-e3e8516c1f69",
+      "name": "Webhook",
+      "webhookId": "03cb4ddc-da00-4ac4-96e0-4c0374dd0179"
+    },
+    {
+      "parameters": {
+        "fromEmail": "n8n@strey.net.br",
+        "toEmail": "maicon@strey.net.br",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        448,
+        0
+      ],
+      "id": "0daf69a7-73b1-4b36-ad38-6aea05293074",
+      "name": "Send an Email",
+      "webhookId": "32a0df73-f917-4144-931b-2d714ec15726",
+      "credentials": {
+        "smtp": {
+          "id": "Qbhxj3FlpLhatJ3a",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputDados = $input.first().json;\n\nfunction escapeHtml(str) {\n    if (!str) return '';\n    return String(str)\n        .replace(/&/g, '&amp;')\n        .replace(/</g, '&lt;')\n        .replace(/>/g, '&gt;')\n        .replace(/\"/g, '&quot;')\n        .replace(/'/g, '&#39;');\n}\n\nfunction getTempoFormatado(tempoSegundos) {\n    const tempo = Number(tempoSegundos) || 0;\n    const minutos = Math.floor(tempo / 60);\n    const segundos = tempo % 60;\n    return minutos > 0 ? `${minutos}m ${segundos}s` : `${segundos}s`;\n}\n\nfunction getSubject(statusGlobal) {\n    let icon = '';\n    switch (statusGlobal) {\n        case 'OK':\n            icon = '🟢';\n            break;\n        case 'WARNING':\n            icon = '🟡';\n            break;\n        default:\n            icon = '🔴';\n    }\n    return `${icon} Relatório do Servidor: ${statusGlobal}`;\n}\n\nfunction getBadge(updatedNow) {\n    let color = '#4caf50'\n    let status = '✓ OK';\n    if (updatedNow) {\n        color = '#ff9800'\n        status = '🔄 UPDATE';\n    }\n    return `<span style=\"background-color: ${color}; color: white; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: bold;\">${status}</span>`;\n}\n\nfunction getLinhaContainer(container) {\n    const badge = getBadge(container.updated_now);\n    const name = escapeHtml(container.name);\n    const image = escapeHtml(container.image);\n\n    return `\n    <tr>\n      <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0;\"><strong>${name}</strong></td>\n      <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; text-align: center;\">${badge}</td>\n      <td style=\"padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-family: monospace; font-size: 12px;\">${image}</td>\n    </tr>\n  `;\n}\n\nfunction getListaContainers(containers = []) {\n    if (containers.length === 0) {\n        return '<p style=\"text-align: center; color: #999; font-style: italic; margin-top: 16px;\">Nenhum container Docker em execução</p>';\n    }\n\n    const linhasHtml = containers.map(container => getLinhaContainer(container)).join('');\n\n    return `\n    <table aria-label=\"Lista de containers em execução\" style=\"width: 100%; border-collapse: collapse; font-size: 14px;\">\n      <thead>\n        <tr style=\"background-color: #f8f9fa;\">\n          <th scope=\"col\" style=\"padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;\">Container</th>\n          <th scope=\"col\" style=\"padding: 10px; text-align: center; border-bottom: 2px solid #dee2e6;\">Status</th>\n          <th scope=\"col\" style=\"padding: 10px; text-align: left; border-bottom: 2px solid #dee2e6;\">Imagem</th>\n        </tr>\n      </thead>\n      <tbody>\n        ${linhasHtml}\n      </tbody>\n    </table>\n  `;\n}\n\nfunction getBody(data) {\n    const tempoFormatado = getTempoFormatado(data.tempo_execucao);\n    const containersHtml = getListaContainers(data.containers);\n    const style_h3 = \"color: #2980b9; margin-bottom: 12px; font-size: 16px; border-bottom: 1px solid #eeeeee; padding-bottom: 6px;\"\n    const style_row = \"display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px;\"\n\n    return `\n  <div style=\"font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; color: #333333;\">\n    <div style=\"background-color: #2c3e50; color: #ffffff; padding: 20px; text-align: center;\">\n      <h2 style=\"margin: 0; font-size: 20px;\">Relatório de Saúde da Infraestrutura</h2>\n    </div>\n    <div style=\"padding: 24px;\">\n      \n      <div style=\"background-color: #f8f9fa; padding: 15px; border-radius: 6px; border-left: 4px solid #27ae60; margin-bottom: 24px;\">\n        <p style=\"margin: 0 0 8px 0;\"><strong>Status Geral:</strong> ${escapeHtml(data.status_global)}</p>\n        <p style=\"margin:0 0 8px 0\"><strong>Uptime:</strong> ${escapeHtml(data.sistema?.uptime)}</p>\n        <p style=\"margin: 0;\"><strong>Tempo de Execução:</strong> ${tempoFormatado}</p>\n      </div>\n      \n      <h3 style=\"${style_h3}\"><span role=\"img\" aria-label=\"Cartão SD\">💾</span> SDCARD</h3>\n      <div aria-label=\"Informações do SDCARD\" style=\"margin-bottom: 24px;\">\n        <div style=\"${style_row}\"><strong>Status:</strong> <span>${escapeHtml(data.sd_card?.status)}</span></div>\n        <div style=\"${style_row}\"><strong>Detalhe:</strong> <span>${escapeHtml(data.sd_card?.mensagem)}</span></div>\n        <div style=\"${style_row}\"><strong>Uso do HD:</strong> <span>${escapeHtml(data.sd_card?.uso_pct)}%</span></div>\n      </div>\n      \n      <h3 style=\"${style_h3}\"><span role=\"img\" aria-label=\"Disco Rígido\">💽</span> HD EXTERNO</h3>\n      <div aria-label=\"Informações do HD Externo\" style=\"margin-bottom: 24px;\">\n        <div style=\"${style_row}\"><strong>Status:</strong> <span>${escapeHtml(data.disco?.status)}</span></div>\n        <div style=\"${style_row}\"><strong>Detalhe:</strong> <span>${escapeHtml(data.disco?.mensagem)}</span></div>\n        <div style=\"${style_row}\"><strong>Uso do HD:</strong> <span>${escapeHtml(data.disco?.uso_pct)}%</span></div>\n      </div>\n      \n      <h3 style=\"${style_h3}\"><span role=\"img\" aria-label=\"Cérebro\">🧠</span> MEMÓRIA</h3>\n      <div aria-label=\"Informações de Memória RAM\" style=\"margin-bottom: 24px;\">\n        <div style=\"${style_row}\"><strong>Uso de RAM:</strong> <span>${escapeHtml(data.memoria?.uso_pct)}%</span></div>\n        <div style=\"${style_row}\"><strong>Consumo Absoluto:</strong> <span>${escapeHtml(data.memoria?.usada_mb)} MB</span></div>\n      </div>\n      \n      <h3 style=\"${style_h3}\"><span role=\"img\" aria-label=\"Engrenagem\">⚙️</span> CPU</h3>\n      <div aria-label=\"Informações da CPU\" style=\"margin-bottom: 24px;\">\n        <div style=\"${style_row}\"><strong>Temperatura:</strong> <span>${escapeHtml(data.cpu?.temperatura_c)} °C</span></div>\n        <div style=\"${style_row}\"><strong>Carga (1m):</strong> <span>${escapeHtml(data.cpu?.load_1m)}</span></div>\n      </div>\n      \n      <h3 style=\"${style_h3}\"><span role=\"img\" aria-label=\"Baleia Docker\">🐳</span> CONTAINERS EM EXECUÇÃO</h3>\n      ${containersHtml}\n      \n    </div>\n    <div style=\"background-color: #f4f4f4; padding: 12px; text-align: center; font-size: 11px; color: #888888;\">\n      Relatório gerado automaticamente pelo sistema de monitoramento via n8n.\n    </div>\n  </div>\n  `;\n}\n\nconst data = inputDados.body || {};\nreturn [{\n    json: {\n        ...inputDados,\n        html: getBody(data),\n        subject: getSubject(data.status_global)\n    }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "8088342d-4774-4c8b-b56a-ce3b96bfc8a7",
+      "name": "Code in JavaScript"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "d43e8952-49e6-4a75-8375-5c2233c487ae",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "76556b98827663c20a5f9df9384348c6799d2a6ba726375de416b41783b4e39b"
+  },
+  "id": "ExQsUhUynVMNnOy6",
+  "tags": []
+}
