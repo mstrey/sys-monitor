@@ -63,6 +63,7 @@ coleta_hd() {
         log_info "Ponto de montagem $MOUNT_POINT confirmado em /proc/mounts"
         local MOUNT_OPTS=$(awk -v m="$MOUNT_POINT" '$2==m {print $4}' /proc/mounts)
         HD_USAGE=$(df -h "$MOUNT_POINT" | awk 'NR==2 {print $5}' | sed 's/%//')
+        HD_USAGE_ABS=$(df -h "$MOUNT_POINT" | awk 'NR==2 {print $3}')
         
         log_info "Uso do disco: ${HD_USAGE}%"
         
@@ -88,6 +89,7 @@ coleta_hd() {
     HD_STATUS="CRITICAL"
     HD_MSG="Desconexao: O disco nao esta montado em $MOUNT_POINT."
     HD_USAGE=0
+    HD_USAGE_ABS="0"
     log_error "$HD_MSG"
 }
 
@@ -97,6 +99,8 @@ coleta_sd() {
     
     local IS_RO=$(awk -v m="$sd_mount" '$2==m {print $4}' /proc/mounts | grep -P "(^|,)ro(,|$)")
     SD_USAGE=$(df -h "$sd_mount" | awk 'NR==2 {print $5}' | sed 's/%//')
+    SD_USAGE_ABS=$(df -h "$sd_mount" | awk 'NR==2 {print $3}')
+    
     log_info "Uso do SD Card: ${SD_USAGE}%"
     
     if [ -n "$IS_RO" ]; then
@@ -274,9 +278,11 @@ gerar_payload_json() {
       --arg hd_status "$HD_STATUS" \
       --arg hd_msg "$HD_MSG" \
       --arg hd_uso "$HD_USAGE" \
+      --arg hd_uso_abs "$HD_USAGE_ABS" \
       --arg sd_status "$SD_STATUS" \
       --arg sd_msg "$SD_MSG" \
       --arg sd_uso "$SD_USAGE" \
+      --arg sd_uso_abs "$SD_USAGE_ABS" \
       --arg r_pct "$RAM_PCT" \
       --arg r_uso "$RAM_USADA" \
       --arg c_load "$CPU_LOAD" \
@@ -287,8 +293,8 @@ gerar_payload_json() {
          status_global: $status,
          tempo_execucao: $total_time,
          sistema: { uptime: $sys_up },
-         sd_card: { status: $sd_status, mensagem: $sd_msg, uso_pct: $sd_uso },
-         disco: { status: $hd_status, mensagem: $hd_msg, uso_pct: $hd_uso },
+         sd_card: { status: $sd_status, mensagem: $sd_msg, uso_pct: $sd_uso, uso_abs: $sd_uso_abs },
+         disco: { status: $hd_status, mensagem: $hd_msg, uso_pct: $hd_uso, uso_abs: $hd_uso_abs },
          memoria: { uso_pct: $r_pct, usada_mb: $r_uso },
          cpu: { load_1m: $c_load, temperatura_c: $c_temp },
          containers: $containers
